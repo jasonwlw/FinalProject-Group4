@@ -1,8 +1,8 @@
 import torchvision
 import torch
 
-def load_dataset():
-    train_path = ''
+def load_dataset(train_path,valid_path,test_path):
+    train_path = train_path
     train_dataset = torchvision.datasets.ImageFolder(
         root=train_path,
         transform=torchvision.transforms.ToTensor()
