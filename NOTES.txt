@@ -1,0 +1,15 @@
+Has anyone built any models yet?
+
+Random cropping to move center of image is most important
+
+
+Added some data augmentation classes for pytorch to script, once Jane's loader is done we can use those
+
+Still need to normalize/standardize images
+
+"no pneumonia treatment needed"
+"supportive care needed (bacteria)"
+"antibiotic treatment needed" for labels":q!
+
+
+classification of xray to determine
