@@ -33,7 +33,7 @@ def resize_im(im):
     return cv2.resize(im,desired_size)
 
 def align_data(im_list):
-    ### Align data and target based on the number in the filename
+    ### Find type of pneumonia from image path
     pneu_type = [im.split('_')[2] for im in im_list]
     virus = []
     bacteria = []
@@ -52,50 +52,63 @@ def batch_generator(normal,virus,bacteria,num_images):
 
 # %% ------------------------------- Read Data -------------------------------------------------------------------
 ### enter the paths to the data on your system
-filepaths = ['../chest_xray/train/NORMAL/','../chest_xray/train/PNEUMONIA/']
-for filepath in filepaths:
-    X = read_data(datapath=filepath, num_data=None)
-    if filepath.split('/')[-2] == 'PNEUMONIA':
-        virus,bacteria = align_data(X)
-    else:
-        normal = X
-        X = None
+filepaths_all = ['../chest_xray/train/NORMAL/','../chest_xray/train/PNEUMONIA/',
+             '../chest_xray/val/NORMAL/','../chest_xray/val/PNEUMONIA/',
+             '../chest_xray/test/NORMAL/','../chest_xray/test/PNEUMONIA/']
+
+keys = ['train','val','test']
+all_folders = {}
+for key in keys:
+    filepaths = [path for path in filepaths_all if key in path]
+    all_types = {}
+    for filepath in filepaths:
+        X = read_data(datapath=filepath, num_data=None)
+        if filepath.split('/')[-2] == 'PNEUMONIA':
+            virus,bacteria = align_data(X)
+            all_types['virus'] = virus
+            all_types['bacteria'] = bacteria
+
+        else:
+            all_types['normal'] = X
+            X = None
+    all_folders[key] = all_types
 
 ### dict for easy access to each array
-all_types = {'normal':normal,'virus':virus,'bacteria':bacteria}
 
 ### Loop through dictionary keys
-for types in all_types:
+for folder in all_folders:
+    all_types = all_folders[folder]
+    for types in all_types:
     ### Loop through file paths in the array
-    for filepath in all_types[types]:
-        im = cv2.imread(filepath)
-        im = resize_im(im)
-        ### numpy is binary file can save space/maybe load time
-        #np.save(filepath.replace('chest_xray','chest_xray_200x200').replace('.jpeg',''),im)
-        savepath = filepath.replace('chest_xray','chest_xray_200x200')
-        ### Alternatively, if your script is in the chest_xray folder:
-        #savepath = filepath.replace('train','train_200x200')
-        ### You may want to further edit the above for your system, or comment it out to overwrite the
-        ### downloaded files.
+        for filepath in all_types[types]:
+            im = cv2.imread(filepath)
+            im = resize_im(im)
+            ### numpy is binary file can save space/maybe load time
+            #np.save(filepath.replace('chest_xray','chest_xray_200x200').replace('.jpeg',''),im)
+            savepath = filepath.replace('chest_xray','chest_xray_200x200')
+            ### Alternatively, if your script is in the chest_xray folder:
+            #savepath = filepath.replace('train','train_200x200')
+            ### You may want to further edit the above for your system, or comment it out to overwrite the
+            ### downloaded files.
 
-        ### Quick and dirty edit to save all at once, make necessary directories.
-        ### can comment out resizing if you want full images, or change the desired size in the resize im function.
-        if types == 'normal':
-            dirpath = '/'.join(savepath.split('/')[:-1])
-            os.system('mkdir -p ' + str(dirpath))
-            cv2.imwrite(savepath,im)
-        elif types == 'virus':
-            ### Replace PNEUMONIA directory with PNEUMONIA-VIRAL
-            savepath = savepath.replace('PNEUMONIA','PNEUMONIA-VIRAL')
-            dirpath = '/'.join(savepath.split('/')[:-1])
-            os.system('mkdir -p ' + str(dirpath))
-            cv2.imwrite(savepath, im)
-        elif types == 'bacteria':
-            savepath = savepath.replace('PNEUMONIA','PNEUMONIA-BACTERIAL')
-            dirpath = '/'.join(savepath.split('/')[:-1])
-            os.system('mkdir -p ' + dirpath)
-            cv2.imwrite(savepath,im)
-        else:
-            print("Something went terribly wrong")
+            ### Quick and dirty edit to save all at once, make necessary directories.
+            ### can comment out resizing if you want full images, or change the desired size in the resize im function.
+            if types == 'normal':
+                dirpath = '/'.join(savepath.split('/')[:-1])
+                os.system('mkdir -p ' + str(dirpath))
+                cv2.imwrite(savepath,im)
+            elif types == 'virus':
+                ### Replace PNEUMONIA directory with PNEUMONIA-VIRAL
+                savepath = savepath.replace('PNEUMONIA','PNEUMONIA-VIRAL')
+                dirpath = '/'.join(savepath.split('/')[:-1])
+                os.system('mkdir -p ' + str(dirpath))
+                cv2.imwrite(savepath, im)
+            elif types == 'bacteria':
+                savepath = savepath.replace('PNEUMONIA','PNEUMONIA-BACTERIAL')
+                dirpath = '/'.join(savepath.split('/')[:-1])
+                os.system('mkdir -p ' + dirpath)
+                cv2.imwrite(savepath,im)
+            else:
+                print("Something went terribly wrong")
 
 
