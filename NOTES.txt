@@ -15,3 +15,5 @@ Still need to normalize/standardize images
 classification of xray to determine
 
 This is my change to check if slack is working
+
+kartik :- Uploaded running file. Needs some work with the loss, COuld you guys help ? 
