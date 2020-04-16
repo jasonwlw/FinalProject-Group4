@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from torchvision import datasets, transforms
 import os
 import numpy as np
 import cv2
@@ -27,7 +28,7 @@ BATCH_SIZE = 60
 DROPOUT = 0.2
 EPS = 1e-8
 WEIGHT_DECAY = 0
-SAVE_EVERY_CHECKPOINT = 20
+SAVE_EVERY_CHECKPOINT = 25
 CHECKPOINT_DIR = './'
 SAVE_EVERY_MODEL = 100
 model_dir = './BEST/'
@@ -127,6 +128,24 @@ class AddGaussianNoise(object):
 
 ### transform.Normalize(torch.mean(
 
+### Set Augmentations:
+
+data_transforms = {
+    'train': transforms.Compose([
+        transforms.RandomResizedCrop(100),
+        transforms.RandomHorizontalFlip(),
+        AddGaussianNoise(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    'val': transforms.Compose([
+        transforms.Resize(128),
+        transforms.CenterCrop(100),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+}
+
 # %% ----------------------------------- Helper Functions --------------------------------------------------------------
 
 
@@ -148,8 +167,62 @@ def y_generator(num_images):
 #%% ---------------------------------------------------Data Prep -------------------------------------------------------
 ### Data loader class goes here - Jane
 
+class ImageData(Dataset):
+    def __init__(self, root_dir, transform=None, mode='train',target=None,encoding='label'):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.images_f = [f for f in os.listdir(self.root_dir) if os.path.splitext(f)[1] == '.jpeg']
+        self.mode = mode
+        assert target is not None, "Pass a target type; NORMAL, VIRAL or BACTERIAL"
+        self.labels_dic = {"red blood cell":0, "difficult":1, "gametocyte":2, "trophozoite":3,
+                          "ring":4, "schizont":5, "leukocyte":6}
+        self.target = target
+
+    def __len__(self):
+        return len(self.images_f)
+
+    def __getitem__(self, index):
+        image_index = self.images_f[index]
+        image_path = os.path.join(self.root_dir, image_index)
+        image = Image.open(image_path)
+
+        if self.transform:
+            image = self.transform(image)
+
+        if self.mode == 'train':
+            if encoding == 'one-hot':
+                label_index = self.labels_f[index]
+                label_path = os.path.join(self.root_dir, label_index)
+                label = self.get_label_one_hot(label_path)
+            elif encoding == 'label':
+                label = target_label_encoding()
+                return image, label
+            else:
+                print("Encoding type not supported. Defaulting to label encoding")
+                label = target_label_encoding()
+                return image, label
+
+        elif self.mode == 'test':
+            return image
+
+    def target_label_encoding():
+        le = LabelEncoder()
+        le = le.fit(["NORMAL","VIRAL","BACTERIAL"])
+        label = le.transform(self.target)
+        return label
+
+
+    def get_label_one_hot(self, label_path):
+        labels = open(label_path, 'r').read().split('\n')
+        label_one_hot = np.zeros(7)
+        for i in labels:
+            label_one_hot[self.labels_dic[i]] = 1
+        return label_one_hot
+
 
 # %% -------------------------------------- CNN Class ------------------------------------------------------------------
+
+### CURRENTLY UNUSED
 class CNN(nn.Module):
     '''
     cfCNN: d'Acremont 2019
@@ -202,60 +275,112 @@ class CNN(nn.Module):
 
 
 # %% -------------------------------------- Training Prep ----------------------------------------------------------
-model = CNN().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=LR, eps=EPS,weight_decay=WEIGHT_DECAY)
-criterion = nn.BCEWithLogitsLoss()
+#model = CNN().to(device)
+#optimizer = torch.optim.Adam(model.parameters(), lr=LR, eps=EPS,weight_decay=WEIGHT_DECAY)
+#criterion = nn.BCEWithLogitsLoss()
 
 
 # %% -------------------------------------- Train ----------------------------------------------------------
-print("Starting training loop...")
-model.train()
-shuf = np.arange(len(X_path_full))
 
-global_loss_test = 100
-last_loss_test = 100
-for epoch in range(N_EPOCHS):
+def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
+    since = time.time()
 
-    loss_train = 0
-    #model.train()
-    for batch in range(len(X_train)//BATCH_SIZE):
-        inds = slice(batch*BATCH_SIZE, (batch+1)*BATCH_SIZE)
-        optimizer.zero_grad()
-        logits = model(X_train[inds]).squeeze()
-        loss = criterion(logits, y_train[inds])
-        loss.backward()
-        optimizer.step()
-        loss_train += loss.item()
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_acc = 0.0
 
-    model.eval()
-    with torch.no_grad():
-        y_test_pred = model(X_test).squeeze()
-        loss = criterion(y_test_pred, y_test)
-        loss_test = loss.item()
+    for epoch in range(num_epochs):
+        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+        print('-' * 10)
 
-    print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Test Loss {:.5f}, Test Acc {:.2f}".format(
-        epoch, loss_train/BATCH_SIZE, acc(X_train, y_train), loss_test, acc(X_test, y_test)))
+        # Each epoch has a training and validation phase
+        for phase in ['train', 'val']:
+            if phase == 'train':
+                model.train()  # Set model to training mode
+            else:
+                model.eval()   # Set model to evaluate mode
 
-    ### move model train here to save a model that can be resumed; it must be in training mode to resume
-    if (epoch + 1) % SAVE_EVERY_MODEL == 0:
-        print("Saving model...")
-        torch.save(model.state_dict(), "./model4_augmented_cropped_epochs_tanh"+str(epoch)+".pt")
+            running_loss = 0.0
+            running_corrects = 0
 
-    model.train()
+            # Iterate over data.
+            for inputs, labels in dataloaders[phase]:
+                inputs = inputs.to(device)
+                labels = labels.to(device)
 
-    if (epoch + 1) % SAVE_EVERY_CHECKPOINT == 0: 
-        is_best = False
-        if loss_test < last_loss_test:
-            if loss_test < global_loss_test:
-                global_loss_test = loss_test
-                is_best = True
+                # zero the parameter gradients
+                optimizer.zero_grad()
 
-        last_loss_test = loss_test
-        checkpoint = {
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'optimizer': optimizer.state_dict()
-        }
-        save_ckp(checkpoint, is_best, CHECKPOINT_DIR, model_dir)
+                # forward
+                # track history if only in train
+                with torch.set_grad_enabled(phase == 'train'):
+                    outputs = model(inputs)
+                    _, preds = torch.max(outputs, 1)
+                    loss = criterion(outputs, labels)
+
+                    # backward + optimize only if in training phase
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
+                            model.train()
+
+                        if (epoch + 1) % SAVE_EVERY_CHECKPOINT == 0:
+                            last_loss_test = loss_test
+                            checkpoint = {
+                                'epoch': epoch + 1,
+                                'state_dict': model.state_dict(),
+                                'optimizer': optimizer.state_dict()
+                            }
+                            save_ckp(checkpoint, is_best, CHECKPOINT_DIR, model_dir)
 
 
+                # statistics
+                running_loss += loss.item() * inputs.size(0)
+                running_corrects += torch.sum(preds == labels.data)
+            if phase == 'train' and scheduler is not None:
+                scheduler.step()
+
+            epoch_loss = running_loss / dataset_sizes[phase]
+            epoch_acc = running_corrects.double() / dataset_sizes[phase]
+
+            print('{} Loss: {:.4f} Acc: {:.4f}'.format(
+                phase, epoch_loss, epoch_acc))
+
+            # deep copy the model
+            if phase == 'val' and epoch_acc > best_acc:
+                best_acc = epoch_acc
+                best_model_wts = copy.deepcopy(model.state_dict())
+
+        print()
+
+
+    time_elapsed = time.time() - since
+    print('Training complete in {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
+    print('Best val Acc: {:4f}'.format(best_acc))
+
+    # load best model weights
+    model.load_state_dict(best_model_wts)
+    return model
+
+
+pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_200x200/train',transform=data_transform)
+
+dataset_loader = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = 64, shuffle = True, num_workers=0)
+
+model_ft = models.resnet18(pretrained=True)
+num_ftrs = model_ft.fc.in_features
+# Here the size of each output sample is set to 2.
+# Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
+model_ft.fc = nn.Linear(num_ftrs, 3)
+
+model_ft = model_ft.to(device)
+
+criterion = nn.CrossEntropyLoss()
+
+# Observe that all parameters are being optimized
+optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+
+# Decay LR by a factor of 0.1 every 7 epochs
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+
+model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
