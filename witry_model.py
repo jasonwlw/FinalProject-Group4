@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms, models
 import os
 import numpy as np
 import cv2
@@ -14,6 +14,7 @@ from itertools import repeat
 from itertools import chain
 import json
 import copy
+import time
 #%% --------------------------------------- Set-Up --------------------------------------------------------------------
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(42)
@@ -125,24 +126,23 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
-
 ### transform.Normalize(torch.mean(
 
 ### Set Augmentations:
 
 data_transforms = {
     'train': transforms.Compose([
-        transforms.RandomResizedCrop(100),
+        transforms.RandomResizedCrop(128),
         transforms.RandomHorizontalFlip(),
-        AddGaussianNoise(),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        AddGaussianNoise(),
+        transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
     'val': transforms.Compose([
         transforms.Resize(128),
-        transforms.CenterCrop(100),
+        #transforms.CenterCrop(100),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
 }
 
@@ -167,7 +167,7 @@ def y_generator(num_images):
 #%% ---------------------------------------------------Data Prep -------------------------------------------------------
 ### Data loader class goes here - Jane
 
-class ImageData(Dataset):
+class ImageData(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None, mode='train',target=None,encoding='label'):
         self.root_dir = root_dir
         self.transform = transform
@@ -321,16 +321,7 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
-                            model.train()
 
-                        if (epoch + 1) % SAVE_EVERY_CHECKPOINT == 0:
-                            last_loss_test = loss_test
-                            checkpoint = {
-                                'epoch': epoch + 1,
-                                'state_dict': model.state_dict(),
-                                'optimizer': optimizer.state_dict()
-                            }
-                            save_ckp(checkpoint, is_best, CHECKPOINT_DIR, model_dir)
 
 
                 # statistics
@@ -338,17 +329,33 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
                 running_corrects += torch.sum(preds == labels.data)
             if phase == 'train' and scheduler is not None:
                 scheduler.step()
+                ### Save checkpoints here
+                if (epoch + 1) % SAVE_EVERY_CHECKPOINT == 0:
+                    checkpoint = {
+                        'epoch': epoch + 1,
+                        'state_dict': model.state_dict(),
+                        'optimizer': optimizer.state_dict()
+                    }
+                    is_best = False
+                    save_ckp(checkpoint, is_best, CHECKPOINT_DIR, model_dir)
+            if phase == 'train':
+                epoch_loss_train = running_loss / dataset_sizes[phase]
+                epoch_acc_train = running_corrects.double() / dataset_sizes[phase]
 
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            elif phase == 'val':
+                epoch_loss_val = running_loss / dataset_sizes[phase]
+                epoch_acc_val = running_corrects.double() / dataset_sizes[phase]
 
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                phase, epoch_loss, epoch_acc))
+
 
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
+
+
+        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Test Loss {:.5f}, Test Acc {:.2f}".format(
+            epoch, epoch_loss_train, epoch_acc_train, epoch_loss_val, epoch_acc_val))
 
         print()
 
@@ -363,9 +370,16 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
     return model
 
 
-pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_200x200/train',transform=data_transform)
+pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_200x200/train',transform=data_transforms['train'])
+pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_200x200/val',transform=data_transforms['val'])
 
-dataset_loader = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = 64, shuffle = True, num_workers=0)
+dataloaders = {}
+dataloaders['train'] = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = BATCH_SIZE, shuffle = True, num_workers=0)
+dataloaders['val'] = torch.utils.data.DataLoader(pneumonia_val_dataset,batch_size = BATCH_SIZE, shuffle = True, num_workers=0)
+
+dataset_sizes = {}
+dataset_sizes['train'] = len(pneumonia_dataset)
+dataset_sizes['val'] = len(pneumonia_val_dataset)
 
 model_ft = models.resnet18(pretrained=True)
 num_ftrs = model_ft.fc.in_features
@@ -378,9 +392,10 @@ model_ft = model_ft.to(device)
 criterion = nn.CrossEntropyLoss()
 
 # Observe that all parameters are being optimized
-optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+optimizer_ft = torch.optim.SGD(model_ft.parameters(), lr=LR, momentum=0.9)
 
 # Decay LR by a factor of 0.1 every 7 epochs
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,num_epochs=25)
+model_ft = train_model(model_ft, criterion, optimizer_ft, scheduler = exp_lr_scheduler,num_epochs=50)
+
