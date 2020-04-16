@@ -174,8 +174,7 @@ class ImageData(torch.utils.data.Dataset):
         self.images_f = [f for f in os.listdir(self.root_dir) if os.path.splitext(f)[1] == '.jpeg']
         self.mode = mode
         assert target is not None, "Pass a target type; NORMAL, VIRAL or BACTERIAL"
-        self.labels_dic = {"red blood cell":0, "difficult":1, "gametocyte":2, "trophozoite":3,
-                          "ring":4, "schizont":5, "leukocyte":6}
+        self.labels_dic = {"NORMAL":0, "VIRAL":1, "BACTERIAL":2,}
         self.target = target
 
     def __len__(self):
