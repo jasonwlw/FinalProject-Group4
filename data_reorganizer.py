@@ -6,7 +6,7 @@ from PIL import ImageEnhance
 import cv2
 import os
 
-
+np.random.seed(42)
 # %%-----------------------------------------------------Helper Functions ---------------------------------------
 
 def read_data(datapath='../train/',test_size = 0.2,num_data = None,num_filetypes=1):
@@ -29,7 +29,7 @@ def read_data(datapath='../train/',test_size = 0.2,num_data = None,num_filetypes
     return np.asarray(im_list)
 
 def resize_im(im):
-    desired_size = (128,128)
+    desired_size = (224,224)
     return cv2.resize(im,desired_size)
 
 def align_data(im_list):
@@ -72,6 +72,36 @@ for key in keys:
             all_types['normal'] = X
             X = None
     all_folders[key] = all_types
+### 5,863 images * 0.15 in validation gives ~ 830 images
+### Nearest divisible by 3 is 831, gives 277 of each image
+### There are 8 bacterial and 8 normal in validation
+### Num bacteria and normal = 277 - 8 = 269
+### num virus is 277
+### Magic numbers will ensure this does not work if read_data does not read in more data than the numbers
+### above
+###
+train_vir = np.random.choice(all_folders['train']['virus'],size=277,replace=False)
+#train_vir = np.random.choice(all_folders['train']['virus'],size=2,replace=False)
+### remove from train
+all_folders['train']['virus'] = np.setdiff1d(all_folders['train']['virus'],train_vir)
+### put in validation
+all_folders['val']['virus'] = np.append(all_folders['val']['virus'],train_vir)
+
+train_bact = np.random.choice(all_folders['train']['bacteria'],size=269,replace=False)
+#train_bact = np.random.choice(all_folders['train']['bacteria'],size=2,replace=False)
+### remove from train
+all_folders['train']['bacteria'] = np.setdiff1d(all_folders['train']['bacteria'],train_bact)
+### put in validation
+all_folders['val']['bacteria'] = np.append(all_folders['val']['bacteria'],train_bact)
+
+train_normal = np.random.choice(all_folders['train']['normal'],size=269,replace=False)
+#train_normal = np.random.choice(all_folders['train']['normal'],size=2,replace=False)
+### remove from train
+all_folders['train']['normal'] = np.setdiff1d(all_folders['train']['normal'],train_normal)
+### put in validation
+all_folders['val']['normal'] = np.append(all_folders['val']['normal'],train_normal)
+
+
 
 ### dict for easy access to each array
 
@@ -80,12 +110,17 @@ for folder in all_folders:
     all_types = all_folders[folder]
     for types in all_types:
     ### Loop through file paths in the array
+        print("Folder",folder)
+        print("Class",types)
         for filepath in all_types[types]:
             im = cv2.imread(filepath)
             im = resize_im(im)
+            im = im / 255.
             ### numpy is binary file can save space/maybe load time
             #np.save(filepath.replace('chest_xray','chest_xray_200x200').replace('.jpeg',''),im)
-            savepath = filepath.replace('chest_xray','chest_xray_128x128')
+            savepath = filepath.replace('chest_xray','chest_xray_224x224')
+            if folder == 'val':
+                savepath = savepath.replace('train','val')
             ### Alternatively, if your script is in the chest_xray folder:
             #savepath = filepath.replace('train','train_200x200')
             ### You may want to further edit the above for your system, or comment it out to overwrite the
