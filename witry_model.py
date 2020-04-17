@@ -132,14 +132,14 @@ class AddGaussianNoise(object):
 
 data_transforms = {
     'train': transforms.Compose([
-        transforms.RandomResizedCrop(128),
+        transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         AddGaussianNoise(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
     'val': transforms.Compose([
-        transforms.Resize(128),
+        transforms.Resize(224),
         #transforms.CenterCrop(100),
         transforms.ToTensor(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
@@ -158,127 +158,6 @@ def save_ckp(state, is_best, checkpoint_dir, best_model_dir):
         f_path = best_model_dir + 'checkpoint_best_model4.pt'
         torch.save(state, f_path)
 
-
-def y_generator(num_images):
-    ### num_images is batchsize
-    return np.concatenate([['NORMAL']*num_images,['VIRUS']*num_images,['BACTERIA']*num_images])
-
-
-#%% ---------------------------------------------------Data Prep -------------------------------------------------------
-### Data loader class goes here - Jane
-
-class ImageData(torch.utils.data.Dataset):
-    def __init__(self, root_dir, transform=None, mode='train',target=None,encoding='label'):
-        self.root_dir = root_dir
-        self.transform = transform
-        self.images_f = [f for f in os.listdir(self.root_dir) if os.path.splitext(f)[1] == '.jpeg']
-        self.mode = mode
-        assert target is not None, "Pass a target type; NORMAL, VIRAL or BACTERIAL"
-        self.labels_dic = {"NORMAL":0, "VIRAL":1, "BACTERIAL":2,}
-        self.target = target
-
-    def __len__(self):
-        return len(self.images_f)
-
-    def __getitem__(self, index):
-        image_index = self.images_f[index]
-        image_path = os.path.join(self.root_dir, image_index)
-        image = Image.open(image_path)
-
-        if self.transform:
-            image = self.transform(image)
-
-        if self.mode == 'train':
-            if encoding == 'one-hot':
-                label_index = self.labels_f[index]
-                label_path = os.path.join(self.root_dir, label_index)
-                label = self.get_label_one_hot(label_path)
-            elif encoding == 'label':
-                label = target_label_encoding()
-                return image, label
-            else:
-                print("Encoding type not supported. Defaulting to label encoding")
-                label = target_label_encoding()
-                return image, label
-
-        elif self.mode == 'test':
-            return image
-
-    def target_label_encoding():
-        le = LabelEncoder()
-        le = le.fit(["NORMAL","VIRAL","BACTERIAL"])
-        label = le.transform(self.target)
-        return label
-
-
-    def get_label_one_hot(self, label_path):
-        labels = open(label_path, 'r').read().split('\n')
-        label_one_hot = np.zeros(7)
-        for i in labels:
-            label_one_hot[self.labels_dic[i]] = 1
-        return label_one_hot
-
-
-# %% -------------------------------------- CNN Class ------------------------------------------------------------------
-
-### CURRENTLY UNUSED
-class CNN(nn.Module):
-    '''
-    cfCNN: d'Acremont 2019
-    '''
-    def __init__(self):
-        super(CNN, self).__init__()
-        #input 200x200
-        self.conv11 = nn.Conv2d(3, 48, (9, 9))  # output (ne, 48, 192 , 192)
-
-        self.convnorm11 = nn.BatchNorm2d(48)
-        #self.pool1 = nn.MaxPool2d((2, 2))  # output (n_examples, 16, 13, 13)
-        self.conv12 = nn.Conv2d(48, 48, (9, 9))  # output (n_examples, 48, 184, 184)
-        self.convnorm12 = nn.BatchNorm2d(48)
-        self.pool1 = nn.MaxPool2d((2, 2))  # output (n_examples, 48, 92, 92)
-        self.conv21 = nn.Conv2d(48, 96, (5, 5)) # output (ne, 96, 88, 88)
-        self.convnorm21 = nn.BatchNorm2d(96)
-        self.conv22 = nn.Conv2d(96, 96, (5, 5)) # output (ne, 32, 84, 84)
-        self.convnorm22 = nn.BatchNorm2d(96)
-        self.pool2 = nn.MaxPool2d((2, 2)) # output (ne, 32, 42, 42)
-        self.conv31 = nn.Conv2d(96, 192, (5, 5)) # (ne, 192, 38, 38)
-        self.convnorm31 = nn.BatchNorm2d(192)
-        self.conv32 = nn.Conv2d(192, 192, (3, 3)) # output (ne, 192, 36, 36)
-        self.convnorm32 = nn.BatchNorm2d(192)
-        self.pool3 = nn.MaxPool2d((2, 2)) # output (ne, 64, 18, 18)
-        self.conv4 = nn.Conv2d(192, 192, (3, 3)) # output (ne, 192, 16, 16)
-        self.convnorm4 = nn.BatchNorm2d(192)
-        self.pool4 = nn.MaxPool2d((2, 2)) # output (ne,  192, 8, 8)
-        self.conv5 = nn.Conv2d(192, 7, (3, 3)) #output (ne, 7, 6, 6)
-        self.convnorm5 = nn.BatchNorm2d(7)
-        self.gap = nn.AvgPool2d((6,6))
-        self.drop = nn.Dropout2d(DROPOUT)
-        self.act = nn.LeakyReLU()
-        #self.act = torch.nn.Sigmoid()
-
-    def forward(self, x):
-        x = self.convnorm11(self.act(self.drop(self.conv11(x))))
-        x = self.pool1(self.convnorm12(self.act(self.drop(self.conv12(x)))))
-        x = self.convnorm21(self.act(self.drop(self.conv21(x))))
-        x = self.pool2(self.convnorm22(self.act(self.drop(self.conv22(x)))))
-        x = self.convnorm31(self.act(self.drop(self.conv31(x))))
-        x = self.pool3(self.convnorm32(self.act(self.drop(self.conv32(x)))))
-        x = self.pool4(self.convnorm4(self.act(self.drop(self.conv4(x))))) ## 1400,1400
-        #x = self.convnorm4(self.drop(self.conv4(x))) #700,700
-        x = self.gap(self.convnorm5(self.act(self.conv5(x))))
-        return x
-        #x = self.pool1(self.convnorm1(self.act(self.conv1(x))))
-        #x = self.pool2(self.convnorm2(self.act(self.conv2(x))))
-        #x = self.drop(self.linear1_bn(self.act(self.linear1(x.view(len(x), -1)))))
-        #return self.linear2(x)
-
-
-# %% -------------------------------------- Training Prep ----------------------------------------------------------
-#model = CNN().to(device)
-#optimizer = torch.optim.Adam(model.parameters(), lr=LR, eps=EPS,weight_decay=WEIGHT_DECAY)
-#criterion = nn.BCEWithLogitsLoss()
-
-
 # %% -------------------------------------- Train ----------------------------------------------------------
 
 def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
@@ -288,7 +167,6 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
     best_acc = 0.0
 
     for epoch in range(num_epochs):
-        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
         # Each epoch has a training and validation phase
@@ -348,8 +226,8 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
 
 
             # deep copy the model
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
+            if phase == 'val' and epoch_acc_val > best_acc:
+                best_acc = epoch_acc_val
                 best_model_wts = copy.deepcopy(model.state_dict())
 
 
@@ -369,8 +247,8 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
     return model
 
 
-pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_200x200/train',transform=data_transforms['train'])
-pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_200x200/val',transform=data_transforms['val'])
+pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_256x256/train',transform=data_transforms['train'])
+pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_256x256/val',transform=data_transforms['val'])
 
 dataloaders = {}
 dataloaders['train'] = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = BATCH_SIZE, shuffle = True, num_workers=0)
