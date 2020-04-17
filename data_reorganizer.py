@@ -29,7 +29,7 @@ def read_data(datapath='../train/',test_size = 0.2,num_data = None,num_filetypes
     return np.asarray(im_list)
 
 def resize_im(im):
-    desired_size = (224,224)
+    desired_size = (256,256)
     return cv2.resize(im,desired_size)
 
 def align_data(im_list):
@@ -115,10 +115,9 @@ for folder in all_folders:
         for filepath in all_types[types]:
             im = cv2.imread(filepath)
             im = resize_im(im)
-            im = im / 255.
             ### numpy is binary file can save space/maybe load time
             #np.save(filepath.replace('chest_xray','chest_xray_200x200').replace('.jpeg',''),im)
-            savepath = filepath.replace('chest_xray','chest_xray_224x224')
+            savepath = filepath.replace('chest_xray','chest_xray_256x256')
             if folder == 'val':
                 savepath = savepath.replace('train','val')
             ### Alternatively, if your script is in the chest_xray folder:
