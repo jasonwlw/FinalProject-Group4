@@ -231,10 +231,9 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
                 best_model_wts = copy.deepcopy(model.state_dict())
 
 
-        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Test Loss {:.5f}, Test Acc {:.2f}".format(
+        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Val Loss {:.5f}, Val Acc {:.2f}".format(
             epoch, epoch_loss_train, epoch_acc_train, epoch_loss_val, epoch_acc_val))
-
-        print()
+        # print()
 
 
     time_elapsed = time.time() - since
