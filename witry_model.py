@@ -24,7 +24,7 @@ torch.backends.cudnn.benchmark = False
 
 # %% ----------------------------------- Hyper Parameters --------------------------------------------------------------
 LR = 1e-3
-N_EPOCHS = 100
+N_EPOCHS = 50
 BATCH_SIZE = 64
 DROPOUT = 0.2
 EPS = 1e-8
@@ -138,7 +138,7 @@ data_transforms = {
         transforms.RandomResizedCrop(224,scale=(0.5,1.0)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        AddGaussianNoise(),
+        #AddGaussianNoise(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
     'val': transforms.Compose([
@@ -155,7 +155,7 @@ data_transforms = {
 def save_ckp(state, is_best, checkpoint_dir, best_model_dir):
     print("Saving checkpoint")
     if not is_best:
-        f_path = checkpoint_dir + 'checkpoint.pt'
+        f_path = checkpoint_dir + 'checkpoint_NoGaussian.pt'
         torch.save(state, f_path)
     else:
         f_path = best_model_dir + 'checkpoint_best_model4.pt'
@@ -277,5 +277,5 @@ optimizer_ft = torch.optim.SGD(model_ft.parameters(), lr=LR, momentum=0.9)
 # Decay LR by a factor of 0.1 every 7 epochs
 exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-model_ft = train_model(model_ft, criterion, optimizer_ft, scheduler = exp_lr_scheduler,num_epochs=10)
+model_ft = train_model(model_ft, criterion, optimizer_ft, scheduler = exp_lr_scheduler,num_epochs=N_EPOCHS)
 
