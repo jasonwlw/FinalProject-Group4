@@ -27,7 +27,7 @@ torch.backends.cudnn.benchmark = False
 # %% ----------------------------------- Hyper Parameters --------------------------------------------------------------
 LR = 1e-3
 N_EPOCHS = 100
-BATCH_SIZE = 60
+BATCH_SIZE = 4
 DROPOUT = 0.2
 EPS = 1e-8
 WEIGHT_DECAY = 0
@@ -117,12 +117,16 @@ class Rescale(object):
 
 ### From https://discuss.pytorch.org/t/how-to-add-noise-to-mnist-dataset-when-using-pytorch/59745/2
 class AddGaussianNoise(object):
-    def __init__(self, mean=0., std=1.):
+    def __init__(self, mean=0., std=0.1):
         self.std = std
         self.mean = mean
-        
+
     def __call__(self, tensor):
-        return tensor + torch.randn(tensor.size()) * self.std + self.mean
+        if np.random.randint(0,2) == 0:
+            return tensor + torch.randn(tensor.size()) * self.std + self.mean
+        else:
+            print("HERE")
+            return tensor
     
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
@@ -134,7 +138,7 @@ class AddGaussianNoise(object):
 
 data_transforms = {
     'train': transforms.Compose([
-        transforms.RandomResizedCrop(224),
+        transforms.RandomResizedCrop(224,scale=(0.5,1.0)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         AddGaussianNoise(),
@@ -172,100 +176,14 @@ def imshow(inp, title=None):
         plt.title(title)
     plt.pause(0.001)  # pause a bit so that plots are updated
 
-# %% -------------------------------------- Train ----------------------------------------------------------
-
-def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
-    since = time.time()
-
-    best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
-
-    for epoch in range(num_epochs):
-        print('-' * 10)
-
-        # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
-            if phase == 'train':
-                model.train()  # Set model to training mode
-            else:
-                model.eval()   # Set model to evaluate mode
-
-            running_loss = 0.0
-            running_corrects = 0
-
-            # Iterate over data.
-            for inputs, labels in dataloaders[phase]:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-
-                # zero the parameter gradients
-                optimizer.zero_grad()
-
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(inputs)
-                    _, preds = torch.max(outputs, 1)
-                    loss = criterion(outputs, labels)
-
-                    # backward + optimize only if in training phase
-                    if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
+# %% -------------------------------------- Test ----------------------------------------------------------
 
 
 
-                # statistics
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-            if phase == 'train' and scheduler is not None:
-                scheduler.step()
-                ### Save checkpoints here
-                if (epoch + 1) % SAVE_EVERY_CHECKPOINT == 0:
-                    checkpoint = {
-                        'epoch': epoch + 1,
-                        'state_dict': model.state_dict(),
-                        'optimizer': optimizer.state_dict()
-                    }
-                    is_best = False
-                    save_ckp(checkpoint, is_best, CHECKPOINT_DIR, model_dir)
-            if phase == 'train':
-                epoch_loss_train = running_loss / dataset_sizes[phase]
-                epoch_acc_train = running_corrects.double() / dataset_sizes[phase]
-
-            elif phase == 'val':
-                epoch_loss_val = running_loss / dataset_sizes[phase]
-                epoch_acc_val = running_corrects.double() / dataset_sizes[phase]
-
-
-
-            # deep copy the model
-            if phase == 'val' and epoch_acc_val > best_acc:
-                best_acc = epoch_acc_val
-                best_model_wts = copy.deepcopy(model.state_dict())
-
-
-        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Test Loss {:.5f}, Test Acc {:.2f}".format(
-            epoch, epoch_loss_train, epoch_acc_train, epoch_loss_val, epoch_acc_val))
-
-        print()
-
-
-    time_elapsed = time.time() - since
-    print('Training complete in {:.0f}m {:.0f}s'.format(
-        time_elapsed // 60, time_elapsed % 60))
-    print('Best val Acc: {:4f}'.format(best_acc))
-
-    # load best model weights
-    model.load_state_dict(best_model_wts)
-    return model
-
-
-def test_model(model, criterion, scheduler=None):
+def test_model(model, criterion):
 
     since = time.time()
 
-    best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
     for epoch in range(num_epochs):
@@ -379,7 +297,7 @@ num_ftrs = model_ft.fc.in_features
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
 model_ft.fc = nn.Linear(num_ftrs, 3)
-model_ft.load_state_dict(torch.load("./checkpoint.pt")['state_dict'])
+model_ft.load_state_dict(torch.load("../checkpoint.pt")['state_dict'])
 model_ft = model_ft.to(device)
 criterion = nn.CrossEntropyLoss()
 visualize_model(model_ft)
