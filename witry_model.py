@@ -25,7 +25,7 @@ torch.backends.cudnn.benchmark = False
 # %% ----------------------------------- Hyper Parameters --------------------------------------------------------------
 LR = 1e-3
 N_EPOCHS = 100
-BATCH_SIZE = 60
+BATCH_SIZE = 64
 DROPOUT = 0.2
 EPS = 1e-8
 WEIGHT_DECAY = 0
@@ -115,12 +115,15 @@ class Rescale(object):
 
 ### From https://discuss.pytorch.org/t/how-to-add-noise-to-mnist-dataset-when-using-pytorch/59745/2
 class AddGaussianNoise(object):
-    def __init__(self, mean=0., std=1.):
+    def __init__(self, mean=0., std=0.1):
         self.std = std
         self.mean = mean
         
     def __call__(self, tensor):
-        return tensor + torch.randn(tensor.size()) * self.std + self.mean
+        if np.random.randint(0,2) == 0:
+            return tensor + torch.randn(tensor.size()) * self.std + self.mean
+        else:
+            return tensor
     
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
@@ -132,7 +135,7 @@ class AddGaussianNoise(object):
 
 data_transforms = {
     'train': transforms.Compose([
-        transforms.RandomResizedCrop(224),
+        transforms.RandomResizedCrop(224,scale=(0.5,1.0)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         AddGaussianNoise(),
@@ -231,9 +234,10 @@ def train_model(model, criterion, optimizer, scheduler=None, num_epochs=100):
                 best_model_wts = copy.deepcopy(model.state_dict())
 
 
-        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Val Loss {:.5f}, Val Acc {:.2f}".format(
+        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Test Loss {:.5f}, Test Acc {:.2f}".format(
             epoch, epoch_loss_train, epoch_acc_train, epoch_loss_val, epoch_acc_val))
-        # print()
+
+        print()
 
 
     time_elapsed = time.time() - since
@@ -273,5 +277,5 @@ optimizer_ft = torch.optim.SGD(model_ft.parameters(), lr=LR, momentum=0.9)
 # Decay LR by a factor of 0.1 every 7 epochs
 exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-model_ft = train_model(model_ft, criterion, optimizer_ft, scheduler = exp_lr_scheduler,num_epochs=50)
+model_ft = train_model(model_ft, criterion, optimizer_ft, scheduler = exp_lr_scheduler,num_epochs=10)
 
