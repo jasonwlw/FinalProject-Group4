@@ -194,19 +194,19 @@ datasets_sizes = {mode: len(datasets[mode]) for mode in modes}
 
 # in train: 1342 normal, 2531 bacteria, 1346 virus
 # using sampler, but I overfit easily  when using sampler
-weights = [1. / 1342, 1. / 2531, 1. / 1346]
-sampler = WeightedRandomSampler(weights, num_samples=int(0.7 * len(datasets['train'])), replacement=True)
-dataloaders = {}
-for mode in modes:
-    if mode == 'train':
-        dataloaders[mode] = DataLoader(datasets[mode], batch_size=16, sampler=sampler)
-    else:
-        dataloaders[mode] = DataLoader(datasets[mode], batch_size=16)
+# weights = [1. / 1342, 1. / 2531, 1. / 1346]
+# sampler = WeightedRandomSampler(weights, num_samples=int(0.7 * len(datasets['train'])), replacement=True)
+# dataloaders = {}
+# for mode in modes:
+#     if mode == 'train':
+#         dataloaders[mode] = DataLoader(datasets[mode], batch_size=16, sampler=sampler)
+#     else:
+#         dataloaders[mode] = DataLoader(datasets[mode], batch_size=16)
 
 #———————————————————————————————————— no sampler————————————————————————————————————————————————————————————————————
 
 # not using sampler
-# dataloaders = {mode: DataLoader(datasets[mode], batch_size=4, shuffle=True) for mode in modes}
+dataloaders = {mode: DataLoader(datasets[mode], batch_size=4, shuffle=True) for mode in modes}
 
 #————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
 print(datasets['train'].class_to_idx.keys())
