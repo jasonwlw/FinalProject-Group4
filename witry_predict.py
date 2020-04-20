@@ -117,7 +117,7 @@ class Rescale(object):
 
 ### From https://discuss.pytorch.org/t/how-to-add-noise-to-mnist-dataset-when-using-pytorch/59745/2
 class AddGaussianNoise(object):
-    def __init__(self, mean=0., std=0.1):
+    def __init__(self, mean=0., std=0.05):
         self.std = std
         self.mean = mean
 
@@ -138,15 +138,18 @@ class AddGaussianNoise(object):
 
 data_transforms = {
     'train': transforms.Compose([
+        #transforms.CenterCrop(1200),
         transforms.RandomResizedCrop(224,scale=(0.5,1.0)),
         transforms.RandomHorizontalFlip(),
+        transforms.RandomAffine(30),
+        transforms.RandomPerspective(),
         transforms.ToTensor(),
         AddGaussianNoise(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
     'val': transforms.Compose([
+        #transforms.CenterCrop(1400),
         transforms.Resize(224),
-        #transforms.CenterCrop(100),
         transforms.ToTensor(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
@@ -275,8 +278,8 @@ def visualize_model(model, num_images=2):
                     return
         model.train(mode=was_training)
 
-pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_256x256/train',transform=data_transforms['train'])
-pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_256x256/val',transform=data_transforms['val'])
+pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_1400x1400/train',transform=data_transforms['train'])
+pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_1400x1400/val',transform=data_transforms['val'])
 
 dataloaders = {}
 dataloaders['train'] = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = BATCH_SIZE, shuffle = True, num_workers=0)
@@ -287,11 +290,14 @@ dataset_sizes['train'] = len(pneumonia_dataset)
 dataset_sizes['val'] = len(pneumonia_val_dataset)
 class_names = pneumonia_dataset.classes
 
-inputs,classes = next(iter(dataloaders['train']))
+#inputs,classes = next(iter(dataloaders['train']))
+inputs,classes = next(iter(dataloaders['val']))
 out = torchvision.utils.make_grid(inputs)
 
-imshow(out, title=[class_names[x] for x in classes])
+#imshow(out, title=[class_names[x] for x in classes])
+imshow(out, title=None)
 
+'''
 model_ft = models.resnet18(pretrained=True)
 num_ftrs = model_ft.fc.in_features
 # Here the size of each output sample is set to 2.
@@ -301,6 +307,6 @@ model_ft.load_state_dict(torch.load("../checkpoint.pt")['state_dict'])
 model_ft = model_ft.to(device)
 criterion = nn.CrossEntropyLoss()
 visualize_model(model_ft)
-
+'''
 
 
