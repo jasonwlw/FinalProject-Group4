@@ -52,8 +52,8 @@ def batch_generator(normal,virus,bacteria,num_images):
 
 # %% ------------------------------- Read Data -------------------------------------------------------------------
 ### enter the paths to the data on your system
-filepaths_all = ['../chest_xray/train/NORMAL/','../chest_xray/train/PNEUMONIA/',
-             '../chest_xray/val/NORMAL/','../chest_xray/val/PNEUMONIA/']
+filepaths_all = ['../chest_xray_256x256/train/NORMAL/','../chest_xray_256x256/train/PNEUMONIA/',
+             '../chest_xray_256x256/val/NORMAL/','../chest_xray_256x256/val/PNEUMONIA/']
 
 keys = ['train','val','test']
 all_folders = {}
