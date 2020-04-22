@@ -17,6 +17,13 @@ import json
 import copy
 import time
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import cohen_kappa_score
+from sklearn.metrics import f1_score
+
+from torch.utils.tensorboard import SummaryWriter
 #%% --------------------------------------- Set-Up --------------------------------------------------------------------
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(42)
@@ -27,7 +34,7 @@ torch.backends.cudnn.benchmark = False
 # %% ----------------------------------- Hyper Parameters --------------------------------------------------------------
 LR = 1e-3
 N_EPOCHS = 100
-BATCH_SIZE = 4
+BATCH_SIZE = 64
 DROPOUT = 0.2
 EPS = 1e-8
 WEIGHT_DECAY = 0
@@ -50,70 +57,6 @@ print("WEIGHT_DECAY", WEIGHT_DECAY)
 
 
 # from: https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
-class RandomCrop(object):
-    """Crop randomly the image in a sample.
-
-    Args:
-        output_size (tuple or int): Desired output size. If int, square crop
-            is made.
-    """
-
-    def __init__(self, output_size):
-        assert isinstance(output_size, (int, tuple))
-        if isinstance(output_size, int):
-            self.output_size = (output_size, output_size)
-        else:
-            assert len(output_size) == 2
-            self.output_size = output_size
-
-    def __call__(self, sample):
-        image, landmarks = sample['image']
-
-        h, w = image.shape[:2]
-        new_h, new_w = self.output_size
-
-        top = np.random.randint(0, h - new_h)
-        left = np.random.randint(0, w - new_w)
-
-        image = image[top: top + new_h,
-                      left: left + new_w]
-
-
-        return {'image': image}
-
-
-class Rescale(object):
-    """Rescale the image in a sample to a given size.
-
-    Args:
-        output_size (tuple or int): Desired output size. If tuple, output is
-            matched to output_size. If int, smaller of image edges is matched
-            to output_size keeping aspect ratio the same.
-    """
-
-    def __init__(self, output_size):
-        assert isinstance(output_size, (int, tuple))
-        self.output_size = output_size
-
-    def __call__(self, sample):
-        image = sample
-
-        h, w = image.shape[:2]
-        if isinstance(self.output_size, int):
-            if h > w:
-                new_h, new_w = self.output_size * h / w, self.output_size
-            else:
-                new_h, new_w = self.output_size, self.output_size * w / h
-        else:
-            new_h, new_w = self.output_size
-
-        new_h, new_w = int(new_h), int(new_w)
-
-        img = transform.resize(image, (new_h, new_w))
-
-
-        return {'image': img}
-
 
 ### From https://discuss.pytorch.org/t/how-to-add-noise-to-mnist-dataset-when-using-pytorch/59745/2
 class AddGaussianNoise(object):
@@ -125,7 +68,6 @@ class AddGaussianNoise(object):
         if np.random.randint(0,2) == 0:
             return tensor + torch.randn(tensor.size()) * self.std + self.mean
         else:
-            print("HERE")
             return tensor
     
     def __repr__(self):
@@ -140,16 +82,16 @@ data_transforms = {
     'train': transforms.Compose([
         #transforms.CenterCrop(1200),
         transforms.RandomResizedCrop(224,scale=(0.5,1.0)),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomAffine(30),
-        transforms.RandomPerspective(),
+        #transforms.RandomHorizontalFlip(),
+        #transforms.RandomAffine(30),
+        #transforms.RandomPerspective(),
         transforms.ToTensor(),
         AddGaussianNoise(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
     'val': transforms.Compose([
-        #transforms.CenterCrop(1400),
-        transforms.Resize(224),
+        #transforms.CenterCrop(224),
+        transforms.Resize((224,224)),
         transforms.ToTensor(),
         transforms.Normalize([0.485,0.456,0.406],[0.229,0.224,0.225])
     ]),
@@ -183,21 +125,20 @@ def imshow(inp, title=None):
 
 
 
-def test_model(model, criterion):
-
+def test_model(model, criterion, on='val'):
+    on = [on]
     since = time.time()
 
     best_acc = 0.0
-
+    num_epochs = 1
+    predicts = []
+    all_labels = []
     for epoch in range(num_epochs):
         print('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['val']:
-            if phase == 'train':
-                model.train()  # Set model to training mode
-            else:
-                model.eval()   # Set model to evaluate mode
+        for phase in on:
+            model.eval()
 
             running_loss = 0.0
             running_corrects = 0
@@ -214,7 +155,7 @@ def test_model(model, criterion):
 
                 # forward
                 # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
+                with torch.set_grad_enabled(False):
                     outputs = model(inputs)
                     if epoch == 1:
                         print(outputs)
@@ -223,6 +164,8 @@ def test_model(model, criterion):
 
 
                 # statistics
+                predicts.append(list(preds.cpu().numpy()))
+                all_labels.append(list(labels.data.cpu().numpy()))
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
@@ -231,13 +174,18 @@ def test_model(model, criterion):
 
 
 
-            # deep copy the model
-
-        print("Epoch {} | Train Loss {:.5f}, Train Acc {:.2f} - Test Loss {:.5f}, Test Acc {:.2f}".format(
-            epoch, epoch_loss_train, epoch_acc_train, epoch_loss_val, epoch_acc_val))
+        print("Epoch {} | Test Loss {:.5f}, Test Acc {:.2f}".format(
+            epoch, epoch_loss_val, epoch_acc_val))
 
         print()
 
+    all_labels = list(chain(*all_labels))
+    predicts = list(chain(*predicts))
+    print(confusion_matrix(all_labels,predicts))
+    print("Precision",precision_score(all_labels,predicts,average='weighted'))
+    print("Recall",recall_score(all_labels,predicts,average='weighted'))
+    print("F1 score",f1_score(all_labels,predicts,average='weighted'))
+    print("Cohen's Kappa",cohen_kappa_score(all_labels,predicts))
 
     time_elapsed = time.time() - since
     print('Testing complete in {:.0f}m {:.0f}s'.format(
@@ -278,35 +226,107 @@ def visualize_model(model, num_images=2):
                     return
         model.train(mode=was_training)
 
-pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_1400x1400/train',transform=data_transforms['train'])
-pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_1400x1400/val',transform=data_transforms['val'])
+pneumonia_dataset = datasets.ImageFolder(root='../chest_xray_256x256/train',transform=data_transforms['train'])
+pneumonia_val_dataset = datasets.ImageFolder(root='../chest_xray_256x256/val',transform=data_transforms['val'])
+pneumonia_test_dataset = datasets.ImageFolder(root='../chest_xray_256x256/test',transform=data_transforms['val'])
 
 dataloaders = {}
-dataloaders['train'] = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = BATCH_SIZE, shuffle = True, num_workers=0)
-dataloaders['val'] = torch.utils.data.DataLoader(pneumonia_val_dataset,batch_size = BATCH_SIZE, shuffle = True, num_workers=0)
+dataloaders['train'] = torch.utils.data.DataLoader(pneumonia_dataset,batch_size = BATCH_SIZE, shuffle=False, num_workers=0)
+dataloaders['val'] = torch.utils.data.DataLoader(pneumonia_val_dataset,batch_size = BATCH_SIZE, shuffle = False, num_workers=0)
+dataloaders['test'] = torch.utils.data.DataLoader(pneumonia_test_dataset,batch_size = BATCH_SIZE, shuffle = False, num_workers=0)
 
 dataset_sizes = {}
 dataset_sizes['train'] = len(pneumonia_dataset)
 dataset_sizes['val'] = len(pneumonia_val_dataset)
+dataset_sizes['test'] = len(pneumonia_test_dataset)
 class_names = pneumonia_dataset.classes
 
 #inputs,classes = next(iter(dataloaders['train']))
-inputs,classes = next(iter(dataloaders['val']))
-out = torchvision.utils.make_grid(inputs)
+#inputs,classes = next(iter(dataloaders['val']))
+#out = torchvision.utils.make_grid(inputs)
 
 #imshow(out, title=[class_names[x] for x in classes])
-imshow(out, title=None)
+#imshow(out, title=None)
 
-'''
 model_ft = models.resnet18(pretrained=True)
 num_ftrs = model_ft.fc.in_features
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
-model_ft.fc = nn.Linear(num_ftrs, 3)
-model_ft.load_state_dict(torch.load("../checkpoint.pt")['state_dict'])
-model_ft = model_ft.to(device)
-criterion = nn.CrossEntropyLoss()
-visualize_model(model_ft)
+model_ft.fc = nn.Linear(num_ftrs, 4096)
+'''
+# for model fc2
+model_ft = nn.Sequential(model_ft,
+        nn.LeakyReLU(),
+        nn.Linear(4096,3))
 '''
 
+# for model fc4
+model_ft = nn.Sequential(model_ft,
+        nn.LeakyReLU(),
+        nn.Linear(4096,2048),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(2048),
+        nn.Linear(2048,1024),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(1024),
+        nn.Linear(1024,512),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(512),
+        nn.Linear(512,3))
+# for model fc8
+'''
+model_ft = nn.Sequential(model_ft,
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(4096),
+        nn.Linear(4096,4096),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(4096),
+        nn.Linear(4096,2048),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(2048),
+        nn.Linear(2048,2048),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(2048),
+        nn.Linear(2048,1024),
+        nn.LeakyReLU(),
+        nn.Dropout(0.5),
+        nn.BatchNorm1d(1024),
+        nn.Linear(1024,3))
+'''
 
+'''
+for checkpoint in os.listdir('./saved_checkpoints_fc2'):
+    print(checkpoint)
+    model_ft.load_state_dict(torch.load("./saved_checkpoints_fc2/"+checkpoint)['state_dict'])
+    model_ft = model_ft.to(device)
+    criterion = nn.CrossEntropyLoss()
+    print("val")
+    test_model(model_ft,criterion,on='val')
+    print("test")
+    test_model(model_ft,criterion,on='test')
+'''
+model_ft.load_state_dict(torch.load("./saved_checkpoints_fc4_continuations/continuation_balanced.pt")['state_dict'])
+model_ft = model_ft.to(device)
+criterion = nn.CrossEntropyLoss()
+print("val")
+test_model(model_ft,criterion,on='val')
+print("test")
+test_model(model_ft,criterion,on='test')
+print("train")
+test_model(model_ft,criterion,on='train')
+#visualize_model(model_ft)
+print("0",class_names[0])
+print("1",class_names[1])
+print("2",class_names[2])
+'''
+writer = SummaryWriter('./fc8_viz')
+images, labels = iter(dataloader['train']).next()
+writer.add_graph(model_ft, images)
+'''

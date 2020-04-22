@@ -52,9 +52,8 @@ def batch_generator(normal,virus,bacteria,num_images):
 
 # %% ------------------------------- Read Data -------------------------------------------------------------------
 ### enter the paths to the data on your system
-filepaths_all = ['../chest_xray/train/NORMAL/','../chest_xray/train/PNEUMONIA/',
-             '../chest_xray/val/NORMAL/','../chest_xray/val/PNEUMONIA/',
-             '../chest_xray/test/NORMAL/','../chest_xray/test/PNEUMONIA/']
+filepaths_all = ['../chest_xray_256x256/train/NORMAL/','../chest_xray_256x256/train/PNEUMONIA/',
+             '../chest_xray_256x256/val/NORMAL/','../chest_xray_256x256/val/PNEUMONIA/']
 
 keys = ['train','val','test']
 all_folders = {}
@@ -80,24 +79,34 @@ for key in keys:
 ### Magic numbers will ensure this does not work if read_data does not read in more data than the numbers
 ### above
 ###
+
+### change filepaths in val to train filepaths
+for sets in all_folders['val']:
+    all_folders['val'][sets] = np.asarray([i.replace('val','train') for i in all_folders['val'][sets]])
+
 train_vir = np.random.choice(all_folders['train']['virus'],size=277,replace=False)
 #train_vir = np.random.choice(all_folders['train']['virus'],size=2,replace=False)
 ### remove from train
 all_folders['train']['virus'] = np.setdiff1d(all_folders['train']['virus'],train_vir)
-### put in validation
-all_folders['val']['virus'] = np.append(all_folders['val']['virus'],train_vir)
 
-train_bact = np.random.choice(all_folders['train']['bacteria'],size=269,replace=False)
+train_bact = np.random.choice(all_folders['train']['bacteria'],size=277,replace=False)
 #train_bact = np.random.choice(all_folders['train']['bacteria'],size=2,replace=False)
 ### remove from train
 all_folders['train']['bacteria'] = np.setdiff1d(all_folders['train']['bacteria'],train_bact)
-### put in validation
-all_folders['val']['bacteria'] = np.append(all_folders['val']['bacteria'],train_bact)
 
-train_normal = np.random.choice(all_folders['train']['normal'],size=269,replace=False)
+train_normal = np.random.choice(all_folders['train']['normal'],size=277,replace=False)
 #train_normal = np.random.choice(all_folders['train']['normal'],size=2,replace=False)
 ### remove from train
 all_folders['train']['normal'] = np.setdiff1d(all_folders['train']['normal'],train_normal)
+
+for sets in all_folders['train']:
+    all_folders['train'][sets] = np.append(all_folders['train'][sets],all_folders['val'][sets])
+
+
+### put in validation
+all_folders['val']['virus'] = np.append(all_folders['val']['virus'],train_vir)
+### put in validation
+all_folders['val']['bacteria'] = np.append(all_folders['val']['bacteria'],train_bact)
 ### put in validation
 all_folders['val']['normal'] = np.append(all_folders['val']['normal'],train_normal)
 
@@ -114,10 +123,10 @@ for folder in all_folders:
         print("Class",types)
         for filepath in all_types[types]:
             im = cv2.imread(filepath)
-            #im = resize_im(im)
+            im = resize_im(im)
             ### numpy is binary file can save space/maybe load time
             #np.save(filepath.replace('chest_xray','chest_xray_200x200').replace('.jpeg',''),im)
-            savepath = filepath.replace('chest_xray','chest_xray_fullims')
+            savepath = filepath.replace('chest_xray','chest_xray_shuffled')
             if folder == 'val':
                 savepath = savepath.replace('train','val')
             ### Alternatively, if your script is in the chest_xray folder:
