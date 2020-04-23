@@ -216,13 +216,13 @@ model2 = model2.cuda()
 
 criterion1 = torch.nn.CrossEntropyLoss()
 criterion2 = torch.nn.CrossEntropyLoss()
-optimizer1 = torch.optim.SGD(model1.parameters(), lr=1e-3)
-optimizer2 = torch.optim.SGD(model2.parameters(), lr=1e-3)
+optimizer1 = torch.optim.Adam(model1.parameters(), lr=1e-3)
+optimizer2 = torch.optim.Adam(model2.parameters(), lr=1e-3)
 lr_scheduler1 = optim.lr_scheduler.StepLR(optimizer1, step_size=3)
 lr_scheduler2 = optim.lr_scheduler.StepLR(optimizer2, step_size=3)
-weight1 = 0.3
-weight2 = 0.7
-epochs = 50
+weight1 = 0.4
+weight2 = 0.6
+epochs = 20
 
 models = [model1, model2]
 criterions = [criterion1, criterion2]
