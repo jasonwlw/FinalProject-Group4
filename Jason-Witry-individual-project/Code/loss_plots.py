@@ -1,7 +1,7 @@
 import numpy as np
 
 import matplotlib.pyplot as plt
-with open("resnet_full_fc8.log") as f0:
+with open("ResNet_fc8.log") as f0:
     losses = f0.readlines()
 
 epochs = []
